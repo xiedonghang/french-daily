@@ -8,6 +8,7 @@ interface YouTubeVideo {
   duration: string;
   thumbnail: string;
   publishDate: string;
+  description: string;
 }
 
 export async function searchFrenchVideos(): Promise<YouTubeVideo[]> {
@@ -26,7 +27,7 @@ export async function searchFrenchVideos(): Promise<YouTubeVideo[]> {
   const all: YouTubeVideo[] = [];
 
   for (const query of shuffled) {
-    const searchUrl = `${YOUTUBE_API}/search?part=snippet&q=${encodeURIComponent(query)}&type=video&videoDuration=medium&relevanceLanguage=fr&videoCaption=closedCaption&maxResults=5&order=date&key=${apiKey}`;
+    const searchUrl = `${YOUTUBE_API}/search?part=snippet&q=${encodeURIComponent(query)}&type=video&videoDuration=medium&relevanceLanguage=fr&maxResults=5&order=date&key=${apiKey}`;
     const searchRes = await fetch(searchUrl);
     const searchData = await searchRes.json();
     if (!searchData.items?.length) continue;
@@ -52,6 +53,7 @@ export async function searchFrenchVideos(): Promise<YouTubeVideo[]> {
         duration: v.contentDetails.duration,
         thumbnail: v.snippet.thumbnails.high?.url || v.snippet.thumbnails.default?.url,
         publishDate: v.snippet.publishedAt,
+        description: v.snippet.description || "",
       })));
     }
 
