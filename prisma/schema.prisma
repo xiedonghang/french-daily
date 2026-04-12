@@ -1,0 +1,35 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Video {
+  id          String     @id @default(cuid())
+  youtubeId   String     @unique
+  title       String
+  channel     String
+  duration    String
+  thumbnail   String
+  transcript  String
+  publishDate DateTime
+  fetchDate   DateTime   @default(now())
+  questions   Question[]
+}
+
+model Question {
+  id            String @id @default(cuid())
+  videoId       String
+  questionText  String
+  optionA       String
+  optionB       String
+  optionC       String
+  optionD       String
+  correctAnswer String
+  explanation   String
+  orderIndex    Int
+  video         Video  @relation(fields: [videoId], references: [id])
+}
