@@ -92,7 +92,7 @@ export default function ListenClient({
         <div className="w-full aspect-video rounded-xl overflow-hidden shadow-sm border border-slate-200/80 bg-slate-900">
           <iframe
             ref={iframeRef}
-            src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&rel=0&modestbranding=1`}
+            src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&rel=0&modestbranding=1&cc_load_policy=1&cc_lang_pref=fr`}
             className="w-full h-full"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
