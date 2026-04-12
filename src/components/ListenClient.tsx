@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useState } from "react";
 
-interface Segment { text: string; offset: number; duration: number; }
 interface Question {
   id: string; questionText: string;
   optionA: string; optionB: string; optionC: string; optionD: string;
@@ -13,72 +12,10 @@ const OPTS = ["A", "B", "C", "D"] as const;
 const OKEY = { A: "optionA", B: "optionB", C: "optionC", D: "optionD" } as const;
 
 export default function ListenClient({
-  videoId, segments, questions,
+  videoId, questions,
 }: {
-  videoId: string; segments: Segment[]; questions: Question[];
+  videoId: string; questions: Question[];
 }) {
-  // === Transcript ===
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const activeRef = useRef<HTMLDivElement>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [activeIdx, setActiveIdx] = useState(-1);
-  const [currentTime, setCurrentTime] = useState(0);
-
-  // Fill transcript to viewport bottom
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    function calc() {
-      if (!el) return;
-      el.style.height = `${Math.max(200, Math.round(window.innerHeight - el.getBoundingClientRect().top - 16))}px`;
-    }
-    calc();
-    const t = setTimeout(calc, 300);
-    window.addEventListener("resize", calc);
-    return () => { clearTimeout(t); window.removeEventListener("resize", calc); };
-  }, []);
-
-  // YouTube postMessage time sync
-  useEffect(() => {
-    function onMessage(e: MessageEvent) {
-      if (e.origin !== "https://www.youtube.com") return;
-      try {
-        const data = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
-        if (data.event === "infoDelivery" && data.info?.currentTime != null) {
-          setCurrentTime(data.info.currentTime);
-        }
-      } catch {}
-    }
-    window.addEventListener("message", onMessage);
-    const iframe = iframeRef.current;
-    const handleLoad = () => {
-      iframe?.contentWindow?.postMessage(
-        JSON.stringify({ event: "listening", id: 1 }), "https://www.youtube.com"
-      );
-    };
-    iframe?.addEventListener("load", handleLoad);
-    return () => { window.removeEventListener("message", onMessage); iframe?.removeEventListener("load", handleLoad); };
-  }, []);
-
-  useEffect(() => {
-    setActiveIdx(segments.findLastIndex((s) => currentTime >= s.offset));
-  }, [currentTime, segments]);
-
-  // Auto-scroll transcript (container only)
-  useEffect(() => {
-    const container = scrollRef.current;
-    const target = activeRef.current;
-    if (!container || !target) return;
-    const scrollTo = target.offsetTop - container.offsetTop - container.offsetHeight / 2 + target.offsetHeight / 2;
-    container.scrollTo({ top: Math.max(0, scrollTo), behavior: "smooth" });
-  }, [activeIdx]);
-
-  const seekTo = useCallback((offset: number) => {
-    iframeRef.current?.contentWindow?.postMessage(
-      JSON.stringify({ event: "command", func: "seekTo", args: [offset, true] }), "https://www.youtube.com"
-    );
-  }, []);
-
   // === Quiz ===
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
@@ -87,47 +24,24 @@ export default function ListenClient({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
-      {/* Left: Video + Transcript */}
+      {/* Left: Video */}
       <div className="lg:col-span-3">
         <div className="w-full aspect-video rounded-xl overflow-hidden shadow-sm border border-slate-200/80 bg-slate-900">
           <iframe
-            ref={iframeRef}
-            src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&rel=0&modestbranding=1&cc_load_policy=1&cc_lang_pref=fr`}
+            src={`https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&cc_load_policy=1&cc_lang_pref=fr`}
             className="w-full h-full"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
           />
         </div>
-        <div className="mt-4 bg-white rounded-xl border border-slate-200/80 overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
-              <span className="text-sm font-semibold text-slate-700">同步字幕</span>
-            </div>
-            <span className="text-xs text-slate-400">点击跳转</span>
+        <div className="mt-4 bg-white rounded-xl border border-slate-200/80 px-5 py-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg">💡</span>
+            <span className="text-sm font-semibold text-slate-700">字幕提示</span>
           </div>
-          <div ref={scrollRef} className="overflow-y-auto p-3 space-y-0.5 transcript-scroll">
-            {segments.map((seg, i) => {
-              const isActive = i === activeIdx;
-              return (
-                <div
-                  key={i}
-                  ref={isActive ? activeRef : undefined}
-                  onClick={() => seekTo(seg.offset)}
-                  className={`flex items-start gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all duration-200 ${
-                    isActive ? "bg-indigo-50 border border-indigo-200/60" : "hover:bg-slate-50 border border-transparent"
-                  }`}
-                >
-                  <span className={`text-xs font-mono mt-0.5 shrink-0 w-10 text-right ${isActive ? "text-indigo-500 font-semibold" : "text-slate-300"}`}>
-                    {fmtTime(seg.offset)}
-                  </span>
-                  <span className={`text-sm leading-relaxed ${isActive ? "text-indigo-900 font-medium" : "text-slate-600"}`}>
-                    {seg.text}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+          <p className="text-sm text-slate-500 leading-relaxed">
+            视频播放器已自动加载法语字幕。如未显示，请点击播放器右下角的 <span className="inline-block px-1.5 py-0.5 bg-slate-100 rounded text-xs font-mono">CC</span> 按钮开启字幕，并选择「法语」。
+          </p>
         </div>
       </div>
 
@@ -227,10 +141,4 @@ export default function ListenClient({
       </div>
     </div>
   );
-}
-
-function fmtTime(s: number): string {
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  return `${m}:${sec.toString().padStart(2, "0")}`;
 }

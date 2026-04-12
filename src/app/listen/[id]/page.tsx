@@ -15,13 +15,6 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
 
   if (!video) notFound();
 
-  let segments: { text: string; offset: number; duration: number }[] = [];
-  try {
-    segments = JSON.parse(video.transcript);
-  } catch {
-    segments = [{ text: video.transcript, offset: 0, duration: 0 }];
-  }
-
   const questions = video.questions.map((q) => ({
     id: q.id,
     questionText: q.questionText,
@@ -70,7 +63,7 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
         </div>
       </div>
 
-      <ListenClient videoId={video.youtubeId} segments={segments} questions={questions} />
+      <ListenClient videoId={video.youtubeId} questions={questions} />
     </div>
   );
 }

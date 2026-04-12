@@ -14,9 +14,10 @@ export async function fetchDailyVideo() {
   }
 
   const videos = await searchFrenchVideos();
-  if (!videos.length) throw new Error("No suitable French video found");
+  // Already sorted: French caption videos first
+  const video = videos.find((v) => v.hasFrenchCaption) || videos[0];
+  if (!video) throw new Error("No suitable French video found");
 
-  const video = videos[Math.floor(Math.random() * videos.length)];
   const questions = await generateQuiz({
     title: video.title,
     channel: video.channel,
@@ -39,6 +40,6 @@ export async function fetchDailyVideo() {
     include: { questions: true },
   });
 
-  console.log("Fetched daily video:", saved.title);
+  console.log("Fetched daily video:", saved.title, "| French caption:", video.hasFrenchCaption);
   return saved;
 }

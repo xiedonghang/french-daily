@@ -1,7 +1,7 @@
-// YouTube Data API v3 — search for ~10min French videos
+// YouTube Data API v3 — search for ~10min French videos with captions
 const YOUTUBE_API = "https://www.googleapis.com/youtube/v3";
 
-interface YouTubeVideo {
+export interface YouTubeVideo {
   youtubeId: string;
   title: string;
   channel: string;
@@ -9,12 +9,30 @@ interface YouTubeVideo {
   thumbnail: string;
   publishDate: string;
   description: string;
+  hasFrenchCaption: boolean;
+}
+
+// Check if a video has French captions via official captions.list API
+async function hasFrenchCaption(
+  videoId: string,
+  apiKey: string
+): Promise<boolean> {
+  const url = `${YOUTUBE_API}/captions?part=snippet&videoId=${videoId}&key=${apiKey}`;
+  const res = await fetch(url);
+  if (!res.ok) return false;
+  const data = await res.json();
+  return (
+    data.items?.some(
+      (c: any) =>
+        c.snippet.language === "fr" ||
+        c.snippet.language?.startsWith("fr-")
+    ) ?? false
+  );
 }
 
 export async function searchFrenchVideos(): Promise<YouTubeVideo[]> {
   const apiKey = process.env.YOUTUBE_API_KEY!;
 
-  // Search for French educational/podcast content ~10 min
   const queries = [
     "français facile podcast",
     "apprendre le français",
@@ -22,7 +40,6 @@ export async function searchFrenchVideos(): Promise<YouTubeVideo[]> {
     "compréhension orale français",
     "actualités en français facile",
   ];
-  // Shuffle and try all queries to maximize candidates
   const shuffled = queries.sort(() => Math.random() - 0.5);
   const all: YouTubeVideo[] = [];
 
@@ -41,24 +58,35 @@ export async function searchFrenchVideos(): Promise<YouTubeVideo[]> {
       const dur = v.contentDetails.duration;
       const match = dur.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
       if (!match) return false;
-      const mins = (parseInt(match[1] || "0") * 60) + parseInt(match[2] || "0") + (parseInt(match[3] || "0") / 60);
+      const mins =
+        parseInt(match[1] || "0") * 60 +
+        parseInt(match[2] || "0") +
+        parseInt(match[3] || "0") / 60;
       return mins >= 7 && mins <= 13;
     });
 
-    if (candidates?.length) {
-      all.push(...candidates.map((v: any) => ({
+    if (!candidates?.length) continue;
+
+    // Verify French captions via official API
+    for (const v of candidates) {
+      const hasFr = await hasFrenchCaption(v.id, apiKey);
+      all.push({
         youtubeId: v.id,
         title: v.snippet.title,
         channel: v.snippet.channelTitle,
         duration: v.contentDetails.duration,
-        thumbnail: v.snippet.thumbnails.high?.url || v.snippet.thumbnails.default?.url,
+        thumbnail:
+          v.snippet.thumbnails.high?.url ||
+          v.snippet.thumbnails.default?.url,
         publishDate: v.snippet.publishedAt,
         description: v.snippet.description || "",
-      })));
+        hasFrenchCaption: hasFr,
+      });
     }
 
     if (all.length >= 10) break;
   }
 
-  return all;
+  // Prefer videos with confirmed French captions
+  return all.sort((a, b) => (b.hasFrenchCaption ? 1 : 0) - (a.hasFrenchCaption ? 1 : 0));
 }
