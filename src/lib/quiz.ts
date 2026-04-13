@@ -63,13 +63,16 @@ export async function generateQuiz(videoInfo: {
 
   const content = res.choices[0].message.content || "{}";
   const jsonMatch = content.match(/\{[\s\S]*\}/);
+  let questions: any[];
   try {
-    const data = JSON.parse(jsonMatch?.[0] || "{}");
-    return data.questions || [];
+    questions = JSON.parse(jsonMatch?.[0] || "{}").questions || [];
   } catch {
-    // Retry with cleaned JSON (fix common LLM issues)
     const cleaned = (jsonMatch?.[0] || "{}").replace(/[\x00-\x1f]/g, " ");
-    const data = JSON.parse(cleaned);
-    return data.questions || [];
+    questions = JSON.parse(cleaned).questions || [];
   }
+
+  const required = ["questionText", "optionA", "optionB", "optionC", "optionD", "correctAnswer", "explanation"];
+  return questions.filter(
+    (q: any) => required.every((k) => typeof q[k] === "string" && q[k].trim())
+  );
 }
