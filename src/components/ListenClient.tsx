@@ -82,12 +82,34 @@ export default function ListenClient({
     return () => clearInterval(timerRef.current);
   }, [playerReady]);
 
-  // Fetch captions
+  // Fetch captions: API returns track URL, browser fetches the actual XML
   useEffect(() => {
     setCaptionLoading(true);
     fetch(`/api/captions/${videoId}`)
       .then((r) => r.json())
-      .then((d) => setCaptions(d.captions || []))
+      .then(async (d) => {
+        if (!d.trackUrl) { setCaptions([]); return; }
+        const xml = await fetch(d.trackUrl).then((r) => r.text());
+        const parsed: Caption[] = [];
+        const re = /<text start="([\d.]+)" dur="([\d.]+)"[^>]*>([\s\S]*?)<\/text>/g;
+        let m;
+        while ((m = re.exec(xml)) !== null) {
+          parsed.push({
+            start: parseFloat(m[1]),
+            dur: parseFloat(m[2]),
+            text: m[3].replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/<[^>]+>/g, "").trim(),
+          });
+        }
+        // Fallback: try <p t="" d=""> format
+        if (parsed.length === 0) {
+          const re2 = /<p\s+t="(\d+)"\s+d="(\d+)"[^>]*>([\s\S]*?)<\/p>/g;
+          while ((m = re2.exec(xml)) !== null) {
+            const text = m[3].replace(/<s[^>]*>([^<]*)<\/s>/g, "$1").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim();
+            if (text) parsed.push({ start: parseInt(m[1]) / 1000, dur: parseInt(m[2]) / 1000, text });
+          }
+        }
+        setCaptions(parsed);
+      })
       .catch(() => setCaptions([]))
       .finally(() => setCaptionLoading(false));
   }, [videoId]);

@@ -7,7 +7,7 @@
 ## 功能
 
 - 🎧 **每日听力** — 自动从 YouTube 抓取法语视频（7-13 分钟）
-- 📄 **同步字幕** — 逐句高亮、自动滚动、点击跳转
+- 📄 **实时字幕** — 播放时从 YouTube 实时加载法语字幕，逐句高亮、自动滚动、点击跳转
 - 📝 **AI 出题** — 基于字幕生成 5 道选择题（法语题目 + 中文解释）
 - 📊 **即时反馈** — 提交评分、答案解析、重新答题
 - 🔄 **定时更新** — Vercel Cron 每天自动抓取新内容
@@ -19,7 +19,7 @@
 | 前端 | Next.js 16 (App Router) + Tailwind CSS |
 | 数据库 | SQLite + Prisma ORM |
 | 视频源 | YouTube Data API v3 |
-| 字幕 | youtube-transcript |
+| 字幕 | youtube-transcript（实时加载，不存储） |
 | AI 出题 | 兼容 OpenAI 接口的任意 LLM |
 | 部署 | Vercel |
 
@@ -75,16 +75,16 @@ CRON_SECRET="your_random_secret"
 src/
 ├── app/
 │   ├── page.tsx                 # 首页（Hero + 今日推荐 + 往期）
-│   ├── listen/page.tsx          # 听力库列表
+│   ├── listen/page.tsx          # 往期听力列表
 │   ├── listen/[id]/page.tsx     # 听力详情页
 │   └── api/
 │       ├── daily/route.ts       # POST 触发每日抓取
+│       ├── captions/[youtubeId]/route.ts  # 实时获取法语字幕
 │       └── videos/              # 视频列表 & 详情 API
 ├── components/
-│   └── ListenClient.tsx         # 播放器 + 同步字幕 + 测试题
+│   └── ListenClient.tsx         # YouTube IFrame API 播放器 + 实时字幕 + 测试题
 ├── lib/
 │   ├── youtube.ts               # YouTube 搜索
-│   ├── transcript.ts            # 字幕获取（带时间戳）
 │   ├── quiz.ts                  # LLM 出题
 │   ├── daily-fetch.ts           # 每日管道
 │   ├── db.ts                    # Prisma 客户端
@@ -93,6 +93,7 @@ src/
 prisma/
 ├── schema.prisma                # 数据模型（Video + Question）
 scripts/
+├── run-daily.ts                 # 手动触发每日抓取
 └── generate-quiz.ts             # 手动补生成测试题
 ```
 
@@ -101,6 +102,10 @@ scripts/
 ### 手动触发抓取
 
 ```bash
+# 通过脚本
+npx tsx scripts/run-daily.ts
+
+# 或通过 API
 curl -X POST http://localhost:3000/api/daily \
   -H "Authorization: Bearer your_random_secret"
 ```
