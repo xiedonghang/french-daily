@@ -17,7 +17,7 @@ export default async function ListenPage() {
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900 mb-1">听力库</h1>
+        <h1 className="text-2xl font-bold text-slate-900 mb-1">往期听力</h1>
         <p className="text-slate-500 text-sm">共 {videos.length} 篇听力练习</p>
       </div>
 

@@ -24,11 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 FrenchDaily
               </span>
             </Link>
-            <div className="flex items-center gap-6 text-sm">
-              <Link href="/listen" className="text-slate-600 hover:text-indigo-600 transition-colors font-medium">
-                听力库
-              </Link>
-            </div>
+            <div className="flex items-center gap-6 text-sm" />
           </div>
         </nav>
 

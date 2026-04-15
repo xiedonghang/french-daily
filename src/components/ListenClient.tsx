@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 interface Question {
   id: string; questionText: string;
@@ -8,40 +8,148 @@ interface Question {
   correctAnswer: string; explanation: string; orderIndex: number;
 }
 
+interface Caption {
+  start: number;
+  dur: number;
+  text: string;
+}
+
 const OPTS = ["A", "B", "C", "D"] as const;
 const OKEY = { A: "optionA", B: "optionB", C: "optionC", D: "optionD" } as const;
+
+function formatTime(s: number) {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${sec.toString().padStart(2, "0")}`;
+}
 
 export default function ListenClient({
   videoId, questions,
 }: {
   videoId: string; questions: Question[];
 }) {
-  // === Quiz ===
+  const playerRef = useRef<any>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const captionListRef = useRef<HTMLDivElement>(null);
+  const [captions, setCaptions] = useState<Caption[]>([]);
+  const [captionLoading, setCaptionLoading] = useState(true);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [playerReady, setPlayerReady] = useState(false);
+
+  // Quiz state
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
   const answered = Object.keys(answers).length;
   const score = submitted ? questions.filter((q) => answers[q.id] === q.correctAnswer).length : 0;
 
+  // Load YouTube IFrame API
+  useEffect(() => {
+    const tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    if (!document.querySelector('script[src="https://www.youtube.com/iframe_api"]')) {
+      document.head.appendChild(tag);
+    }
+
+    const init = () => {
+      playerRef.current = new (window as any).YT.Player("yt-player", {
+        videoId,
+        playerVars: { rel: 0, modestbranding: 1, cc_load_policy: 1, cc_lang_pref: "fr" },
+        events: {
+          onReady: () => setPlayerReady(true),
+        },
+      });
+    };
+
+    if ((window as any).YT?.Player) {
+      init();
+    } else {
+      (window as any).onYouTubeIframeAPIReady = init;
+    }
+
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      playerRef.current?.destroy?.();
+    };
+  }, [videoId]);
+
+  // Poll current time
+  useEffect(() => {
+    if (!playerReady) return;
+    timerRef.current = setInterval(() => {
+      const t = playerRef.current?.getCurrentTime?.();
+      if (typeof t === "number") setCurrentTime(t);
+    }, 300);
+    return () => clearInterval(timerRef.current);
+  }, [playerReady]);
+
+  // Fetch captions
+  useEffect(() => {
+    setCaptionLoading(true);
+    fetch(`/api/captions/${videoId}`)
+      .then((r) => r.json())
+      .then((d) => setCaptions(d.captions || []))
+      .catch(() => setCaptions([]))
+      .finally(() => setCaptionLoading(false));
+  }, [videoId]);
+
+  // Auto-scroll to active caption
+  const activeIdx = captions.findIndex(
+    (c) => currentTime >= c.start && currentTime < c.start + c.dur
+  );
+
+  useEffect(() => {
+    if (activeIdx < 0 || !captionListRef.current) return;
+    const el = captionListRef.current.children[activeIdx] as HTMLElement;
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [activeIdx]);
+
+  const seekTo = useCallback((time: number) => {
+    playerRef.current?.seekTo?.(time, true);
+  }, []);
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
-      {/* Left: Video */}
-      <div className="lg:col-span-3">
-        <div className="w-full aspect-video rounded-xl overflow-hidden shadow-sm border border-slate-200/80 bg-slate-900">
-          <iframe
-            src={`https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&cc_load_policy=1&cc_lang_pref=fr`}
-            className="w-full h-full"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
+      {/* Left: Video + Captions — sticky, fits viewport */}
+      <div className="lg:col-span-3 lg:sticky lg:top-[3.75rem] lg:h-[calc(92vh-4.5rem)] flex flex-col overflow-hidden">
+        <div className="w-full aspect-video rounded-xl overflow-hidden shadow-sm border border-slate-200/80 bg-slate-900 shrink-0">
+          <div id="yt-player" className="w-full h-full" />
         </div>
-        <div className="mt-4 bg-white rounded-xl border border-slate-200/80 px-5 py-4">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-lg">💡</span>
-            <span className="text-sm font-semibold text-slate-700">字幕提示</span>
+
+        {/* Captions panel */}
+        <div className="mt-4 bg-white rounded-xl border border-slate-200/80 overflow-hidden flex-1 min-h-0 flex flex-col">
+          <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2">
+              <span className="text-base">📜</span>
+              <span className="text-sm font-semibold text-slate-700">法语字幕</span>
+            </div>
+            <span className="text-xs text-slate-400">
+              {captionLoading ? "加载中..." : captions.length > 0 ? `${captions.length} 句` : "无字幕"}
+            </span>
           </div>
-          <p className="text-sm text-slate-500 leading-relaxed">
-            视频播放器已自动加载法语字幕。如未显示，请点击播放器右下角的 <span className="inline-block px-1.5 py-0.5 bg-slate-100 rounded text-xs font-mono">CC</span> 按钮开启字幕，并选择「法语」。
-          </p>
+          <div ref={captionListRef} className="overflow-y-auto divide-y divide-slate-50 flex-1 min-h-0">
+            {captions.map((c, i) => (
+              <button
+                key={i}
+                onClick={() => seekTo(c.start)}
+                className={`w-full text-left px-5 py-2.5 flex items-start gap-3 transition-colors hover:bg-indigo-50/60 ${i === activeIdx ? "bg-indigo-50 border-l-2 border-indigo-500" : "border-l-2 border-transparent"
+                  }`}
+              >
+                <span className={`text-xs font-mono shrink-0 mt-0.5 ${i === activeIdx ? "text-indigo-600 font-semibold" : "text-slate-400"
+                  }`}>
+                  {formatTime(c.start)}
+                </span>
+                <span className={`text-sm leading-relaxed ${i === activeIdx ? "text-indigo-900 font-medium" : "text-slate-600"
+                  }`}>
+                  {c.text}
+                </span>
+              </button>
+            ))}
+            {!captionLoading && captions.length === 0 && (
+              <div className="px-5 py-8 text-center text-sm text-slate-400">
+                该视频暂无可用的法语字幕
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -61,9 +169,8 @@ export default function ListenClient({
             </div>
             <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all duration-500 ${
-                  submitted ? (score >= 4 ? "bg-emerald-500" : score >= 2 ? "bg-amber-500" : "bg-red-400") : "bg-indigo-500"
-                }`}
+                className={`h-full rounded-full transition-all duration-500 ${submitted ? (score >= 4 ? "bg-emerald-500" : score >= 2 ? "bg-amber-500" : "bg-red-400") : "bg-indigo-500"
+                  }`}
                 style={{ width: `${((submitted ? score : answered) / questions.length) * 100}%` }}
               />
             </div>
@@ -104,9 +211,8 @@ export default function ListenClient({
                     })}
                   </div>
                   {submitted && (
-                    <div className={`ml-7 mt-2.5 text-xs leading-relaxed px-3 py-2 rounded-lg ${
-                      isCorrect ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"
-                    }`}>
+                    <div className={`ml-7 mt-2.5 text-xs leading-relaxed px-3 py-2 rounded-lg ${isCorrect ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"
+                      }`}>
                       {isCorrect ? "✅ " : `❌ 正确答案 ${q.correctAnswer} · `}{q.explanation}
                     </div>
                   )}

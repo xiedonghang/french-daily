@@ -28,17 +28,17 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
   }));
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
-      <nav className="flex items-center gap-2 text-sm text-slate-400 mb-6">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4">
+      <nav className="flex items-center gap-2 text-sm text-slate-400 mb-3 shrink-0">
         <Link href="/" className="hover:text-indigo-600 transition-colors">首页</Link>
         <span>/</span>
-        <Link href="/listen" className="hover:text-indigo-600 transition-colors">听力库</Link>
+        <Link href="/listen" className="hover:text-indigo-600 transition-colors">往期听力</Link>
         <span>/</span>
         <span className="text-slate-600 truncate max-w-[200px]">{video.title}</span>
       </nav>
 
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mb-3 leading-snug">
+      <div className="mb-3 shrink-0">
+        <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mb-2 leading-snug">
           {video.title}
         </h1>
         <div className="flex flex-wrap items-center gap-3 text-sm">
