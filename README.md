@@ -7,8 +7,8 @@
 ## 功能
 
 - 🎧 **每日听力** — 自动从 YouTube 抓取法语视频（7-13 分钟）
-- 📄 **实时字幕** — 播放时从 YouTube 实时加载法语字幕，逐句高亮、自动滚动、点击跳转
-- 📝 **AI 出题** — 基于字幕生成 5 道选择题（法语题目 + 中文解释）
+- 📄 **同步字幕** — 法语字幕逐句高亮、自动滚动、点击跳转到对应位置
+- 📝 **AI 出题** — 基于视频信息生成 5 道选择题（法语题目 + 中文解释）
 - 📊 **即时反馈** — 提交评分、答案解析、重新答题
 - 🔄 **定时更新** — Vercel Cron 每天自动抓取新内容
 
@@ -17,9 +17,9 @@
 | 层 | 技术 |
 |---|---|
 | 前端 | Next.js 16 (App Router) + Tailwind CSS |
-| 数据库 | SQLite + Prisma ORM |
+| 数据库 | Turso (LibSQL) + Prisma ORM |
 | 视频源 | YouTube Data API v3 |
-| 字幕 | youtube-transcript（实时加载，不存储） |
+| 字幕 | youtube-transcript（抓取时存入数据库） |
 | AI 出题 | 兼容 OpenAI 接口的任意 LLM |
 | 部署 | Vercel |
 
@@ -52,15 +52,14 @@ npm run dev
 ```env
 DATABASE_URL="file:./dev.db"
 
+# Turso (生产环境)
+TURSO_DATABASE_URL="libsql://your-db.turso.io"
+TURSO_AUTH_TOKEN="your_turso_token"
+
 # YouTube Data API v3
 YOUTUBE_API_KEY="your_youtube_api_key"
 
 # LLM 配置（兼容 OpenAI 接口）
-# OpenAI:   https://api.openai.com/v1         gpt-4o-mini
-# DeepSeek: https://api.deepseek.com          deepseek-chat
-# 通义千问:  https://dashscope.aliyuncs.com/compatible-mode/v1  qwen-plus
-# Kimi:     https://api.moonshot.cn/v1         moonshot-v1-8k
-# Ollama:   http://localhost:11434/v1          qwen2.5
 LLM_BASE_URL="https://api.deepseek.com"
 LLM_API_KEY="your_llm_api_key"
 LLM_MODEL="deepseek-chat"
@@ -74,26 +73,27 @@ CRON_SECRET="your_random_secret"
 ```
 src/
 ├── app/
-│   ├── page.tsx                 # 首页（Hero + 今日推荐 + 往期）
+│   ├── page.tsx                 # 首页（Hero + 今日推荐 + 往期听力）
 │   ├── listen/page.tsx          # 往期听力列表
 │   ├── listen/[id]/page.tsx     # 听力详情页
 │   └── api/
 │       ├── daily/route.ts       # POST 触发每日抓取
-│       ├── captions/[youtubeId]/route.ts  # 实时获取法语字幕
+│       ├── captions/[youtubeId]/route.ts  # 从数据库读取字幕
 │       └── videos/              # 视频列表 & 详情 API
 ├── components/
-│   └── ListenClient.tsx         # YouTube IFrame API 播放器 + 实时字幕 + 测试题
+│   └── ListenClient.tsx         # YouTube IFrame API 播放器 + 同步字幕 + 测试题
 ├── lib/
 │   ├── youtube.ts               # YouTube 搜索
 │   ├── quiz.ts                  # LLM 出题
-│   ├── daily-fetch.ts           # 每日管道
-│   ├── db.ts                    # Prisma 客户端
+│   ├── daily-fetch.ts           # 每日管道（视频 + 字幕 + 出题）
+│   ├── db.ts                    # Prisma 客户端（Turso adapter）
 │   └── format.ts                # 工具函数
 ├── generated/prisma/            # Prisma 生成类型
 prisma/
 ├── schema.prisma                # 数据模型（Video + Question）
 scripts/
 ├── run-daily.ts                 # 手动触发每日抓取
+├── backfill-captions.ts         # 为已有视频回填字幕
 └── generate-quiz.ts             # 手动补生成测试题
 ```
 
@@ -102,12 +102,20 @@ scripts/
 ### 手动触发抓取
 
 ```bash
-# 通过脚本
+# 通过脚本（本地）
 npx tsx scripts/run-daily.ts
 
 # 或通过 API
 curl -X POST http://localhost:3000/api/daily \
   -H "Authorization: Bearer your_random_secret"
+```
+
+### 回填字幕
+
+为已有视频补充字幕数据：
+
+```bash
+npx tsx scripts/backfill-captions.ts
 ```
 
 ### 补生成测试题
