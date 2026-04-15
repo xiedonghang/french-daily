@@ -1,6 +1,7 @@
 import { prisma } from "./db";
 import { searchFrenchVideos } from "./youtube";
 import { generateQuiz } from "./quiz";
+import { YoutubeTranscript } from "youtube-transcript";
 
 const MAX_RETRY_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -57,6 +58,16 @@ async function tryFetchVideo() {
     description: video.description,
   });
 
+  // Fetch French captions
+  let transcript = "";
+  try {
+    const items = await YoutubeTranscript.fetchTranscript(video.youtubeId, { lang: "fr" });
+    const captions = items.map((i) => ({ start: i.offset / 1000, dur: i.duration / 1000, text: i.text }));
+    transcript = JSON.stringify(captions);
+  } catch (e: any) {
+    console.log("Caption fetch failed:", e.message);
+  }
+
   const saved = await prisma.video.create({
     data: {
       youtubeId: video.youtubeId,
@@ -64,7 +75,7 @@ async function tryFetchVideo() {
       channel: video.channel,
       duration: video.duration,
       thumbnail: video.thumbnail,
-      transcript: "",
+      transcript,
       publishDate: new Date(video.publishDate),
       questions: {
         create: questions.map((q, i) => ({ ...q, orderIndex: i })),
