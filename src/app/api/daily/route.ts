@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { fetchDailyVideo } from "@/lib/daily-fetch";
 
-// POST /api/daily — trigger daily video fetch (called by cron)
-export async function POST(req: Request) {
+// Vercel cron sends GET requests
+export const maxDuration = 300; // 5 minutes (max for Pro plan)
+
+export async function GET(req: Request) {
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

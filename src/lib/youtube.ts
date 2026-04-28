@@ -12,22 +12,33 @@ export interface YouTubeVideo {
   hasFrenchCaption: boolean;
 }
 
-// Check if a video has French captions via official captions.list API
-async function hasFrenchCaption(
-  videoId: string,
-  apiKey: string
-): Promise<boolean> {
-  const url = `${YOUTUBE_API}/captions?part=snippet&videoId=${videoId}&key=${apiKey}`;
-  const res = await fetch(url);
-  if (!res.ok) return false;
-  const data = await res.json();
-  return (
-    data.items?.some(
-      (c: any) =>
-        c.snippet.language === "fr" ||
-        c.snippet.language?.startsWith("fr-")
-    ) ?? false
-  );
+// Check if a video has French captions via InnerTube player API (includes auto-generated)
+async function hasFrenchCaption(videoId: string): Promise<boolean> {
+  try {
+    const res = await fetch(
+      "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": "com.google.android.youtube/20.10.38 (Linux; U; Android 14)",
+        },
+        body: JSON.stringify({
+          context: { client: { clientName: "ANDROID", clientVersion: "20.10.38" } },
+          videoId,
+        }),
+      }
+    );
+    if (!res.ok) return false;
+    const data = await res.json();
+    const tracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+    if (!Array.isArray(tracks)) return false;
+    return tracks.some(
+      (t: any) => t.languageCode === "fr" || t.languageCode?.startsWith("fr-")
+    );
+  } catch {
+    return false;
+  }
 }
 
 export async function searchFrenchVideos(): Promise<YouTubeVideo[]> {
@@ -69,7 +80,7 @@ export async function searchFrenchVideos(): Promise<YouTubeVideo[]> {
 
     // Verify French captions via official API
     for (const v of candidates) {
-      const hasFr = await hasFrenchCaption(v.id, apiKey);
+      const hasFr = await hasFrenchCaption(v.id);
       all.push({
         youtubeId: v.id,
         title: v.snippet.title,

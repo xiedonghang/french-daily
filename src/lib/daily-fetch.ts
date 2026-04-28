@@ -3,8 +3,6 @@ import { searchFrenchVideos } from "./youtube";
 import { generateQuiz } from "./quiz";
 import { YoutubeTranscript } from "youtube-transcript";
 
-const MAX_RETRY_MS = 30 * 60 * 1000; // 30 minutes
-
 export async function fetchDailyVideo() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -16,27 +14,6 @@ export async function fetchDailyVideo() {
     return existing;
   }
 
-  let delay = 30_000; // 30s initial
-  const start = Date.now();
-
-  while (Date.now() - start < MAX_RETRY_MS) {
-    try {
-      const result = await tryFetchVideo();
-      if (result) return result;
-    } catch (e: any) {
-      console.error(`Fetch failed: ${e.message}`);
-    }
-
-    if (Date.now() - start + delay >= MAX_RETRY_MS) break;
-    console.log(`Retrying in ${delay / 1000}s...`);
-    await new Promise((r) => setTimeout(r, delay));
-    delay = Math.min(delay * 2, 240_000); // cap at 240s
-  }
-
-  throw new Error("Failed to fetch daily video after 30 minutes of retries");
-}
-
-async function tryFetchVideo() {
   const existingIds = new Set(
     (await prisma.video.findMany({ select: { youtubeId: true } })).map(
       (v) => v.youtubeId
@@ -44,12 +21,10 @@ async function tryFetchVideo() {
   );
 
   const videos = await searchFrenchVideos();
-  // Skip videos already in DB, prefer French captions
   const candidates = videos.filter((v) => !existingIds.has(v.youtubeId));
   const video = candidates.find((v) => v.hasFrenchCaption) || candidates[0];
   if (!video) {
-    console.log("All candidates already exist in DB, skipping");
-    return null;
+    throw new Error("No new video candidates found");
   }
 
   const questions = await generateQuiz({
@@ -58,14 +33,23 @@ async function tryFetchVideo() {
     description: video.description,
   });
 
-  // Fetch French captions
+  // Fetch French captions — try fr, then fall back to any available language
   let transcript = "";
   try {
     const items = await YoutubeTranscript.fetchTranscript(video.youtubeId, { lang: "fr" });
     const captions = items.map((i) => ({ start: i.offset / 1000, dur: i.duration / 1000, text: i.text }));
     transcript = JSON.stringify(captions);
   } catch (e: any) {
-    console.log("Caption fetch failed:", e.message);
+    console.warn("French caption fetch failed:", e.message);
+    // Fallback: try without specifying language (gets default/auto-generated)
+    try {
+      const items = await YoutubeTranscript.fetchTranscript(video.youtubeId);
+      const captions = items.map((i) => ({ start: i.offset / 1000, dur: i.duration / 1000, text: i.text }));
+      transcript = JSON.stringify(captions);
+      console.log("Fetched fallback captions:", captions.length, "segments");
+    } catch (e2: any) {
+      console.warn("Fallback caption fetch also failed:", e2.message);
+    }
   }
 
   const saved = await prisma.video.create({
@@ -84,6 +68,6 @@ async function tryFetchVideo() {
     include: { questions: true },
   });
 
-  console.log("Fetched daily video:", saved.title, "| French caption:", video.hasFrenchCaption);
+  console.log("Fetched daily video:", saved.title, "| transcript:", transcript.length > 2 ? "✅" : "❌");
   return saved;
 }
